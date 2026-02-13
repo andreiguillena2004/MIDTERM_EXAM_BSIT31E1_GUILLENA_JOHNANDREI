@@ -19,9 +19,66 @@ function App() {
   const [selectedFrame, setSelectedFrame] = useState(null); // { playerIndex, frameNumber }
   const [isGameOver, setIsGameOver] = useState(false);
 
+  // Helper function to determine current player based on game state
+  const determineCurrentPlayer = (gameData) => {
+    if (!gameData || !gameData.players || gameData.players.length === 0) return 0;
+
+    const players = gameData.players;
+    
+    // Find the player with the least progress or incomplete frame
+    for (let round = 0; round < 10; round++) {
+      for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        const frames = player.frames || [];
+        
+        // If player has fewer frames than current round + 1, it's their turn
+        if (frames.length <= round) {
+          return i;
+        }
+        
+        // If player has a frame at this round, check if it's complete
+        const frame = frames[round];
+        if (frame) {
+          const isFrameComplete = isFrameCompleted(frame, round + 1);
+          if (!isFrameComplete) {
+            return i;
+          }
+        }
+      }
+    }
+    
+    return 0; // Default to first player
+  };
+
+  // Helper to check if a frame is complete
+  const isFrameCompleted = (frame, frameNumber) => {
+    if (!frame || frame.roll1 === null || frame.roll1 === undefined) return false;
+    
+    if (frameNumber < 10) {
+      // Strike completes the frame
+      if (frame.roll1 === 10) return true;
+      // Two rolls complete the frame
+      return frame.roll2 !== null && frame.roll2 !== undefined;
+    } else {
+      // 10th frame
+      if (frame.roll2 === null || frame.roll2 === undefined) return false;
+      
+      const isStrike = frame.roll1 === 10;
+      const isSpare = (frame.roll1 + frame.roll2) === 10;
+      
+      // If strike or spare, need third roll
+      if (isStrike || isSpare) {
+        return frame.roll3 !== null && frame.roll3 !== undefined;
+      }
+      
+      return true; // Open frame in 10th
+    }
+  };
+
   const handleStartGame = async (players) => {
     setLoading(true);
     setIsGameOver(false);
+    setCurrentPlayerIndex(0); // Reset to first player
     try {
       if (isLive) {
         // --- LIVE MODE: Call API ---
@@ -62,6 +119,10 @@ function App() {
         await rollBall(game.id, currentPlayer.id, pins);
         const updatedGame = await getGame(game.id);
         setGame(updatedGame);
+
+        // Determine whose turn it is based on game state
+        const nextPlayerIndex = determineCurrentPlayer(updatedGame);
+        setCurrentPlayerIndex(nextPlayerIndex);
 
         if (updatedGame.isFinished) setIsGameOver(true);
 
